@@ -8,11 +8,15 @@
 	</head>
 	<body>
 		<div id="info">
-			<a href="https://github.com/darkrut22/Robot-Arm-of-Machine" target="_blank" rel="noopener">My three.js Project</a>
+			<a href="https://github.com/darkrut22/Robot-Arm-of-Machine" target="_blank" rel="noopener">My Three.js Project - Robot's Arm of Machine</a>
 		</div>
 
 		<script type="module">
-
+      import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.124/build/three.module.js';
+      import Stats from 'https://cdn.jsdelivr.net/npm/three@0.124/examples/jsm/libs/stats.module.js';
+      import { TWEEN } from 'https://cdn.jsdelivr.net/npm/three@0.124/examples/jsm/libs/tween.module.min.js';
+      import { ColladaLoader } from 'https://cdn.jsdelivr.net/npm/three@0.124/examples/jsm/loaders/ColladaLoader.js';
+      
 			let container, stats;
 
 			let camera, scene, renderer;
@@ -23,6 +27,28 @@
 			let kinematicsTween;
 			const tweenParameters = {};
 
+			const loader = new ColladaLoader();
+			loader.load( './models/collada/abb_irb52_7_120.dae', function ( collada ) {
+
+				dae = collada.scene;
+
+				dae.traverse( function ( child ) {
+					if ( child.isMesh ) {
+						// model does not have normals
+						child.material.flatShading = true;
+					}
+				} );
+
+				dae.scale.x = dae.scale.y = dae.scale.z = 10.0;
+				dae.updateMatrix();
+
+				kinematics = collada.kinematics;
+
+				init();
+				animate();
+
+			} );
+
 			function init() {
 
 				container = document.createElement( 'div' );
@@ -30,21 +56,16 @@
 
 				camera = new THREE.PerspectiveCamera( 45, window.innerWidth / window.innerHeight, 1, 2000 );
 				camera.position.set( 2, 2, 3 );
-				scene = new THREE.Scene();
 
-				
+				scene = new THREE.Scene();
 
 				const grid = new THREE.GridHelper( 20, 20, 0x888888, 0x444444 );
 				scene.add( grid );
-
-				// Add the COLLADA
 
 				scene.add( dae );
 
 				particleLight = new THREE.Mesh( new THREE.SphereGeometry( 4, 8, 8 ), new THREE.MeshBasicMaterial( { color: 0xffffff } ) );
 				scene.add( particleLight );
-
-				// Lights
 
 				const light = new THREE.HemisphereLight( 0xffeeee, 0x111122 );
 				scene.add( light );
@@ -57,7 +78,66 @@
 				renderer.setSize( window.innerWidth, window.innerHeight );
 				container.appendChild( renderer.domElement );
 
+				stats = new Stats();
+				container.appendChild( stats.dom );
+
+				setupTween();
+
 				window.addEventListener( 'resize', onWindowResize );
+
+			}
+
+			function setupTween() {
+
+				const duration = THREE.MathUtils.randInt( 1000, 5000 );
+
+				const target = {};
+
+				for ( const prop in kinematics.joints ) {
+
+					if ( kinematics.joints.hasOwnProperty( prop ) ) {
+
+						if ( ! kinematics.joints[ prop ].static ) {
+
+							const joint = kinematics.joints[ prop ];
+
+							const old = tweenParameters[ prop ];
+
+							const position = old ? old : joint.zeroPosition;
+
+							tweenParameters[ prop ] = position;
+
+							target[ prop ] = THREE.MathUtils.randInt( joint.limits.min, joint.limits.max );
+
+						}
+
+					}
+
+				}
+
+				kinematicsTween = new TWEEN.Tween( tweenParameters ).to( target, duration ).easing( TWEEN.Easing.Quadratic.Out );
+
+				kinematicsTween.onUpdate( function ( object ) {
+
+					for ( const prop in kinematics.joints ) {
+
+						if ( kinematics.joints.hasOwnProperty( prop ) ) {
+
+							if ( ! kinematics.joints[ prop ].static ) {
+
+								kinematics.setJointValue( prop, object[ prop ] );
+
+							}
+
+						}
+
+					}
+
+				} );
+
+				kinematicsTween.start();
+
+				setTimeout( setupTween, duration );
 
 			}
 
@@ -70,18 +150,29 @@
 
 			}
 
-			//
-
 			function animate() {
 
 				requestAnimationFrame( animate );
 
 				render();
+				stats.update();
+				TWEEN.update();
 
 			}
 
 			function render() {
 
+				const timer = Date.now() * 0.0001;
+
+				camera.position.x = Math.cos( timer ) * 20;
+				camera.position.y = 10;
+				camera.position.z = Math.sin( timer ) * 20;
+
+				camera.lookAt( 0, 5, 0 );
+
+				particleLight.position.x = Math.sin( timer * 4 ) * 3009;
+				particleLight.position.y = Math.cos( timer * 5 ) * 4000;
+				particleLight.position.z = Math.cos( timer * 4 ) * 3009;
 
 				renderer.render( scene, camera );
 
